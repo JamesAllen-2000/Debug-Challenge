@@ -3,38 +3,41 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from crewai_tools import tools
-from crewai_tools.tools.serper_dev_tool import SerperDevTool
+from crewai.tools import BaseTool
+from crewai_tools import SerperDevTool
+from pydantic import BaseModel, Field
+from pypdf import PdfReader
 
 ## Creating search tool
 search_tool = SerperDevTool()
 
 ## Creating custom pdf reader tool
-class FinancialDocumentTool():
-    async def read_data_tool(path='data/sample.pdf'):
-        """Tool to read data from a pdf file from a path
+class _ReadFinancialDocumentInput(BaseModel):
+    path: str = Field(default="data/sample.pdf", description="Path to a PDF file on disk")
 
-        Args:
-            path (str, optional): Path of the pdf file. Defaults to 'data/sample.pdf'.
 
-        Returns:
-            str: Full Financial Document file
-        """
-        
-        docs = Pdf(file_path=path).load()
+class FinancialDocumentTool(BaseTool):
+    name: str = "read_financial_document"
+    description: str = "Read a financial PDF document from disk and return extracted text."
+    args_schema: type[BaseModel] = _ReadFinancialDocumentInput
 
-        full_report = ""
-        for data in docs:
-            # Clean and format the financial document data
-            content = data.page_content
-            
-            # Remove extra whitespaces and format properly
-            while "\n\n" in content:
-                content = content.replace("\n\n", "\n")
-                
-            full_report += content + "\n"
-            
-        return full_report
+    def _run(self, path: str = "data/sample.pdf") -> str:
+        if not os.path.exists(path):
+            return f"File not found: {path}"
+
+        reader = PdfReader(path)
+        pages_text: list[str] = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            # Normalize excessive whitespace a bit
+            while "\n\n" in text:
+                text = text.replace("\n\n", "\n")
+            pages_text.append(text)
+
+        return "\n".join(pages_text).strip()
+
+
+financial_document_tool = FinancialDocumentTool()
 
 ## Creating Investment Analysis Tool
 class InvestmentTool:
